@@ -1,0 +1,326 @@
+---
+title: "HW3 document"
+output: github_document
+---
+
+```{r loading library, message=FALSE}
+library(tidyverse)
+library(p8105.datasets)
+```
+
+```{r setting}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE,
+	fig.width = 8, 
+  fig.height = 6,
+  out.width = "90%"
+)
+```
+
+##Problem 1
+
+```{r loading dataset}
+library(p8105.datasets)
+data("instacart")
+```
+The `instacart` dataset contains `r nrow(instacart)` observations and ``r ncol(instacart)`` variables.
+Each row represent one product from the instacart order, which contains other information about the product, product id, name, user id, order number, aisle, department id, department and the purchase related information such as if the item is reordered, order hour of the day, day since prior order, and add to cart order. 
+
+```{r number of aisles, and the aisles are the most items ordered from}
+instacart |> 
+  group_by(aisle) |> 
+  summarize(n_obs = n()) |> 
+  arrange (desc(n_obs))
+```
+There are 134 aisles, and `Fresh vegetables` is the most items customers ordered from.
+
+```{r plotting}
+instacart |>
+  count(aisle) |> 
+  filter(n > 10000) |> 
+  mutate(aisle = fct_reorder(aisle, n)) |> 
+  ggplot(aes(x = aisle, y = n)) + 
+  geom_point() + 
+  labs(title = "Number of items ordered in each aisle") +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1))
+```
+From this plot, fresh vegetables and fresh fruits are the most ordered items.
+
+```{r table showing 3 most popular items}
+instacart |> 
+  filter(aisle %in% c("baking ingredients", "dog food care", "packaged vegetables fruits")) |>
+  group_by(aisle) |> 
+  count(product_name) |> 
+  mutate(
+    rank = min_rank(desc(n))) |> 
+  filter(rank <= 3) |> 
+  arrange(desc(n)) |>
+  knitr::kable()
+```
+From `packaged vegetables fruits`, the 3 most popular items are organic baby spinach, organic rasberries, organic blueberries, and from baking ingredients, light brown sugar, pure baking soda and cane sugar are the 3 most popular items. For dog food care, snack sticks chicken & rice recipe dog treats, organix chicken & brown rice recipe and small dog biscuits are the top 3.
+
+```{r table showing the mean hour of the day at which Pink Lady Apples and Coffee Ice Cream}
+instacart |> 
+  filter(
+    product_name == "Pink Lady Apples"|
+    product_name == "Coffee Ice Cream") |> 
+  group_by(product_name, order_dow) |> 
+  summarize(mean_hour = mean(order_hour_of_day)) |> 
+  pivot_wider(
+    names_from = product_name,
+    values_from = mean_hour) |> 
+  knitr::kable(digits = 2)
+```
+
+
+##Problem 2
+```{r loading datasets}
+library(p8105.datasets)
+data("brfss_smart2010")
+```
+This dataset contains `r nrow(brfss_smart2010)` observations.
+
+```{r renaming and cleaning for response}
+brfss_clean<-
+  brfss_smart2010|>
+  janitor::clean_names()|>
+  filter(
+    topic=="Overall Health")|>
+  filter(
+    response==c("Excellent", "Very good", "Good", "Fair", "Poor"))|>
+    arrange(factor(response, levels = c("Poor", "Fair", "Good", "Very good", "Excellent")))
+```
+
+For this step in data cleaning, I organize responses as a factor taking levels ordered from “Poor” to “Excellent, and include only response from Excellent to poor. 
+
+```{r rename location}
+brfss_clean =
+  brfss_smart2010 |> 
+  as_tibble() |> 
+  janitor::clean_names() |> 
+  rename(
+    state = locationabbr,
+    county = locationdesc) 
+```
+This step rename state and city, make it easier to look at the data.
+
+```{r state observed 7 or more locations in 2002}
+brfss_state2002 <- brfss_clean |>
+  filter(year == "2002") |>
+  group_by(state) |>
+  summarise(county = n_distinct(county)) |>
+  filter(county >= 7)
+
+brfss_state2002$state
+```
+The above 6 states `r names(brfss_state2002)` were observed at 7 or more locations in 2002.
+
+
+```{r for 2010}
+brfss_state2010 <- brfss_clean |> 
+  filter(year == "2010") |> 
+  group_by(state) |> 
+  summarise(county = n_distinct(county)) |>  
+  filter(county >= 7) 
+
+brfss_state2010$state
+```
+The above 14 states `r names(brfss_state2010)` were observed at 7 or more locations in 2010.
+
+
+```{r construct a dataset, limit to excellent response}
+excellent_data <- brfss_clean |>
+  filter(response == "Excellent") |>
+  select(year, state, data_value) |>
+  group_by(year, state) |>
+  summarise(avg_data_value = mean(data_value, na.rm = TRUE) ) |>
+  drop_na ()
+```
+
+```{r making a spaghetti plot}
+ggplot(excellent_data, 
+       aes(x = year, y = avg_data_value, group = state, color = state)) +
+  geom_line () +
+  geom_point () +
+  labs(title = "Average Value of 'Excellent' Responses Over Time by State",
+       x = "Year",
+       y = "Average Value") +
+  theme(legend.position="left")
+```
+
+This is a plot where each state's line depicts how the average "Excellent" response value changes over the years.
+
+```{r finding the data to making two-panel plot for 2006 and 2010}
+ny_data = brfss_clean |>
+  filter(state == "NY", 
+         year == "2006" | year =="2010") |>
+  select(year, county, data_value, response)
+```
+This step filter the main dataset to get data specific to: `Years` 2006 and 2010, NY state, Responses ranging from "Poor" to "Excellent"
+
+
+```{r making the plot for 2006 and 2010}
+ny_data |> 
+  ggplot(aes(x = factor(response, levels = c("Poor", "Fair", "Good", "Very good", "Excellent")), 
+             y = data_value)) +
+  xlab("Response") + ylab("Data value") +
+  theme(axis.text.x = element_text(size = 8)) +
+  geom_boxplot(color = "white", alpha = 0.5) +
+  geom_point(aes(color = county)) + 
+  facet_grid(. ~ year) + 
+  labs(title = "Plot of Data Value over Responses among NY, 2006 vs.2010")
+print(ny_data)
+```
+For the respondents who categorized their experiences as "poor", the spread of data values was relatively narrow in both years, with the majority of counties reflecting averages below 5 in this category. Conversely, the "good" and "very good" categories drew the highest number of responses in both 2006 and 2010. While in 2006 the distribution of values between these two categories appeared quite balanced, by 2010 there was a noticeable tilt, with "very good" registering evidently higher data values compared to the "good" category.
+
+Variability Across Counties: There's noticeable variability in data values among different counties for the same response. For instance, in both 2006 and 2010, the "Excellent" category exhibits a wide range of data values across different counties. Some counties consistently hover around higher data values, while others are more dispersed.
+
+
+##Problem 3
+
+```{r reading the datsets}
+demo_df = read.csv("data/nhanes_covar.csv", skip = 4)
+accel_df = read.csv("data/nhanes_accel.csv")
+```
+
+```{r tidying the demo data}
+demo_data_clean = demo_df |>
+  janitor::clean_names() |>
+  mutate(
+    sex = recode(sex, 
+                 `1` = "male", 
+                 `2` = "female"),
+    education = recode(education,
+                       `1` = "less than high school",
+                       `2` = "high school equivalent",
+                       `3` = "more than high school"),
+    age = as.numeric(age),
+    bmi = as.numeric(bmi)
+  ) |>
+  filter(age >= 21) |>
+  drop_na()
+```
+For this step, I recoded the sex column, where a value of '1' is transformed to "male" and '2' is transformed to "female". Similarly, I recoded the education column, assigning more descriptive labels to the numeric education levels. I also converted the age and bmi columns to numeric data types. I feel like this is often needed when data is initially read as character or factor types, especially if mathematical operations or certain types of visualizations are to be performed on these columns. Lastly, I removed any rows that have missing values in any of the columns. 
+
+
+```{r cleaning Accelerometer data}
+accel_data_clean <- accel_df |>
+  janitor::clean_names() |>
+  pivot_longer(                                            
+    min1:min1440,
+    names_to = "min",
+    values_to = "mims",
+    names_prefix = "min"
+  ) |>
+  mutate(
+    min = as.numeric(min)
+  )
+```
+For this step, I reshaped the dataset from a wide format to a long format using the pivot_longer() function. specifically, I renamed these columns to a single column named "min".
+which the corresponding values from these columns are stored in a new column named "mims". And I converted the min column (which stores the minute values) to a numeric data type.
+
+
+```{r Join dataset}
+join_df = 
+  inner_join(demo_data_clean, accel_data_clean, by = "seqn") |> 
+  arrange(age, bmi) |>
+  drop_na()
+```
+
+This `join_df` dataset contains `r nrow(join_df)` observations and `r ncol(join_df)` variables.
+
+#Produce a reader-friendly table for the number of men and women in each education category, and create a visualization of the age distributions for men and women in each education category.
+
+```{r table for education and sex }
+education_sex_count = demo_data_clean |>
+   group_by(sex, education) |> 
+  summarise(quantity = n()) |> 
+  pivot_wider(
+    names_from = sex,
+    values_from = quantity
+  ) |> 
+  knitr::kable()
+ education_sex_count 
+```
+`education_sex_count` table is a 3*4 table that contains information about the the number of men and women in each education category, High school equivalent, Less than high school, and More than high school.
+
+For High School Equivalent: In this education category, there are more males (35) than females (23). The difference suggests that, in this dataset, males are slightly more likely to have achieved only a high school equivalent level of education.
+
+For Less Than High School: The distribution between males and females is almost even here, with females slightly outnumbering males, 28 to 27. This near parity indicates that, for those who did not complete high school, gender does not seem to play a significant role in this educational attainment.
+
+For More Than High School: Among those with education surpassing high school level, females (59) slightly outnumber males (56). This suggests that females in this dataset are slightly more likely to pursue education beyond high school compared to males.
+Overall, while there are some discrepancies in male and female counts across educational levels, the differences are not stark. Both genders have substantial representation in all three education categories.
+
+
+
+
+#Visualization of age distributions for men and women in each education category
+```{r visualization of age distribution}
+demo_data_clean |>
+   ggplot(aes(x = factor(education, 
+                        levels = c("less than high school", 
+                                   "high school equivalent", 
+                                   "more than high school")), 
+     y = age, fill = sex)) +
+  geom_boxplot() + 
+  labs(title = "Age Distributions for Men and Women by Education", 
+       x = "Education",
+       y = "Age") 
+```
+The boxplot effectively highlights the central tendencies and spreads of the age distributions. The side-by-side comparison allows for easy visual interpretation of differences across categories.
+
+For the `demo_data_clean` boxplot, both men and women who have 'more than high school' education appear younger on average compared to the other two categories. The median age for this group is lower than that of the other two categories.For those with  `less than high school` education, the age distribution for men and women is quite similar, with both medians hovering around the early 60s.In the `high school equivalent` category, females tend to be slightly older than males on average.
+In the `less than high school` and `more than high school` categories, the age distributions for males and females are closely aligned. The medians are nearly identical, and the overall spread of ages is similar.
+For those with a `high school equivalent` education, there's a slight difference in age distributions between males and females, with females being slightly older on average.
+
+
+
+```{r creating activity summary}
+activity_summary = join_df |>
+    group_by(seqn, age, sex, education) |>
+    summarise(
+      total_activity = sum(mims))
+```
+This step aim to  aggregate and summarize `accelerometer data` for each participant based on their unique sequence number `seqn`, `age`, `sex`, and `education level`.
+
+
+```{r create plot for total activities}
+ggplot(activity_summary, 
+       aes(x = age, y = total_activity, color = sex)) +
+  geom_point(alpha = .5) +
+  geom_smooth(se = FALSE) +
+  facet_wrap(~ education) +
+ labs(title="Total Activity by Age, Separated by Education Level",
+         x="Age",
+         y="Total Activity") +
+    theme_minimal()
+```
+The `activity_summary` plot presents 3 panels, each repersent a different education level. For X-axis represents age, and Y-axis represents total acitivity. 
+
+It appears to be a notable decline in total activity with age, regardless of gender and education level. This trend is consistent with the general understanding that physical activity often decreases with age due to various factors.
+For all `education levels`, `females` tend to show slightly higher total activity levels than `males`, especially in the middle age ranges. However, in the `more than high school` education category, this difference between `males` and `females` narrows significantly.
+In the  `high school equivalent` category, there's a pronounced peak in total activity for both genders around the age of 40.
+Participants with `less than high school` education show a sharper decline in activity from early to middle ages, and then the decline slows down.
+Those with `more than high school` education exhibit a more gradual decline in activity over time, with a slight increase in the middle age range for females.
+The scatter points indicate that there's a wide variance in total activity within the same age group. Some individuals remain highly active in older age, while others show reduced activity in younger age groups.
+The smoothed lines provide a clear visualization of the general trend in total activity across different age groups. They help in understanding the average trajectory of activity decline with age.
+
+
+
+```{r plot for 24 hour activity}
+activity_24 = join_df |>
+  ggplot(aes(x = min, y = mims, group = seqn, color = sex)) +
+  geom_line(alpha = .2) +
+  geom_smooth(aes(group = sex), se = FALSE, method="loess") +
+  facet_grid(. ~ education) +
+  labs(
+    title = "Activity over the course of day by Education Level",
+    x = "Time in mins",
+    y = "Activity Levels",
+  ) +
+  theme_minimal()
+```
+
+
