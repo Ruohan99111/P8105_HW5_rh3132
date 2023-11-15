@@ -10,4 +10,81 @@ library(ggplot2)
 ```
 
 #problem1 
+```{r data preparation}
+data_url = "https://raw.githubusercontent.com/washingtonpost/data-homicides/master/homicide-data.csv"
+homicide_data = read.csv(data_url)
+
+formatted_data =
+  homicide_data |>
+  mutate(combined_city_state = paste(city, state, sep = ", ")) |> 
+  group_by(combined_city_state) |> 
+  summarise(
+    total_cases = n(), 
+    unresolved_cases = sum(disposition %in% c("Closed without arrest", "Open/No arrest"))  
+  )
+
+formatted_data = formatted_data[formatted_data$combined_city_state != "Tulsa, AL", ] 
+formatted_data
+
+```
+
+Baltimore analysis
+```{r}
+baltimore_data = homicide_data |> 
+  mutate(combined_city_state = paste(city, state, sep = ", ")) |> 
+  mutate(case_status = ifelse(disposition == "Closed by arrest", "resolved_cases", "unresolved_cases")) |> 
+  filter(combined_city_state == "Baltimore, MD")
+
+baltimore_analysis = prop.test(x = sum(baltimore_data$case_status %in% c("unresolved_cases")), n = nrow(baltimore_data), correct = FALSE)
+
+baltimore_analysis_refined = broom::tidy(baltimore_analysis) |> 
+  mutate(conf_interval = paste(conf.low, conf.high, sep = ", ")) |> 
+  rename(proportion_estimate = estimate) |> 
+  select(proportion_estimate, conf_interval)
+
+baltimore_analysis_refined
+```
+
+City wide analysis
+```{r}
+analysis_df = formatted_data |> 
+  mutate(
+    test_result_per_city = map2(unresolved_cases, total_cases, ~prop.test(x = .x, n = .y)),
+    tidy_result_per_city = map(test_result_per_city, broom::tidy)
+  ) |> 
+  select(combined_city_state, tidy_result_per_city) |> 
+  unnest(tidy_result_per_city) |> 
+  select(combined_city_state, estimate, conf.low, conf.high) 
+
+tidy_city_df = analysis_df |> 
+  mutate(ci_range = paste(conf.low, conf.high, sep = ", ")) |> 
+  rename(proportion_unresolved = estimate) |> 
+  select(combined_city_state, proportion_unresolved, ci_range)
+
+tidy_city_df
+
+```
+Visualization
+```{r}
+ggplot(analysis_df, aes(x = reorder(combined_city_state, estimate), y = estimate)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.2, color = "blue") +
+  coord_flip() +  
+  labs(x = "City",
+       y = "Proportion of Unsolved Homicides",
+       title = "City-wise Unsolved Homicide Proportions and Confidence Intervals") +
+  theme_minimal()
+
+```
+
+#Problem 2
+```{r import data}
+data_files = list.files(path = "./data/", full.names = TRUE)
+```
+
+
+```{r create dataframe and extract relevant info}
+
+
+```
 
