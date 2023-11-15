@@ -78,13 +78,57 @@ ggplot(analysis_df, aes(x = reorder(combined_city_state, estimate), y = estimate
 ```
 
 #Problem 2
-```{r import data}
-data_files = list.files(path = "./data/", full.names = TRUE)
+
+```{r}
+file_paths = list.files(path = "data", full.names = TRUE) |> as.list()
+
+file_names <- list.files(path = "data", full.names = FALSE)
+combined_data <- file_paths %>%
+  map_dfr(read_csv, .id = NULL)
+```
+
+```{r Creating a dataframe for extracting subject IDs and group information}
+extracted_details <- tibble(file_name = file_names) %>%
+  mutate(
+    participant_id = gsub(".*_(\\d+)\\.csv", "\\1", file_name),
+    group_type = gsub("^(con|exp)_.*", "\\1", file_name),
+  )
 ```
 
 
-```{r create dataframe and extract relevant info}
+```{r # Merging the details with the main data and reshaping}
+final_dataset <- extracted_details %>%
+  bind_cols(combined_data) %>%
+  select(-file_name) %>%
+  pivot_longer(cols = starts_with("week"),
+               names_to = "Week",
+               values_to = "Observation") %>%
+  group_by(participant_id, group_type)
 
+final_dataset
+```
+
+```{r plot}
+spaghetti_plot <- ggplot(final_dataset, aes(x = Week, y = Observation, group = participant_id, color = participant_id)) +
+  geom_line(alpha = 0.5) + 
+  geom_point(size = 2, alpha = 0.5) + 
+  facet_wrap(~group_type) +  
+  labs(
+    title = "Spaghetti Plot of Observations for Each Subject Over Time",
+    subtitle = "Differences Between Experimental and Control Groups",
+    x = "Time (Weeks)",
+    y = "Observation Value",
+    color = "Subject ID"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")  
+
+# Display the plot
+spaghetti_plot
 
 ```
+
+In the `control`group, we observe that weekly observations have slightly fluctuations within the range of -1.2 to 3.5.
+However, in the `experimental`group, An increase weekly is seen in observations from week 1 to week 8.
+The differences between control and experimental groups is that the experimental group increases as the time increase.
 
