@@ -345,10 +345,141 @@ spaghetti_plot <- ggplot(final_dataset, aes(x = Week, y = Observation, group = p
 spaghetti_plot
 ```
 
-![](HW5_files/figure-gfm/plot-1.png)<!-- -->
+![](HW5_files/figure-gfm/plot-1.png)<!-- --> In the `control`group, we
+observe that weekly observations have slightly fluctuations within the
+range of -1.2 to 3.5. However, in the `experimental`group, An increase
+weekly is seen in observations from week 1 to week 8. The differences
+between control and experimental groups is that the experimental group
+increases as the time increase.
 
-In the `control`group, we observe that weekly observations have slightly
-fluctuations within the range of -1.2 to 3.5. However, in the
-`experimental`group, An increase weekly is seen in observations from
-week 1 to week 8. The differences between control and experimental
-groups is that the experimental group increases as the time increase.
+# Problem 3
+
+``` r
+library(broom)
+library(dplyr)
+```
+
+``` r
+set.seed(123)
+```
+
+``` r
+sample_size = 30
+standard_deviation = 5
+significance_level = 0.05
+mean_values_set = 0:6
+num_simulations = 5000
+```
+
+``` r
+simulate_data <- function(n = 30, mu = 0, sd = 5) {
+  simulated_values = rnorm(n, mean = mu, sd = sd)
+  tibble(values = simulated_values) %>% 
+    summarize(estimated_mean = mean(values), estimated_sd = sd(values))
+}
+
+simulation_outputs <- map(seq_len(num_simulations), ~ simulate_data(30, 0, 5)) %>% 
+                      bind_rows()
+```
+
+``` r
+t_test_results = data.frame(mean_val = numeric(), mean_estimate = numeric(), p_val = numeric(), is_rejected = logical())
+
+for (mu_val in mean_values_set) {
+  estimated_means = numeric(num_simulations)
+  p_values = numeric(num_simulations)
+
+  for (j in 1:num_simulations) {
+    sample_data = rnorm(sample_size, mean = mu_val, sd = standard_deviation)
+    test_result = t.test(sample_data, mu = 0)
+    cleaned_result = broom::tidy(test_result)
+
+    estimated_means[j] = cleaned_result$estimate
+    p_values[j] = cleaned_result$p.value
+  }
+
+  null_rejections = p_values < significance_level
+  t_test_results = rbind(t_test_results, data.frame(mean_val = rep(mu_val, num_simulations), mean_estimate = estimated_means, p_val = p_values, is_rejected = null_rejections))
+}
+
+head(test_result)
+```
+
+    ## $statistic
+    ##        t 
+    ## 8.805511 
+    ## 
+    ## $parameter
+    ## df 
+    ## 29 
+    ## 
+    ## $p.value
+    ## [1] 1.088694e-09
+    ## 
+    ## $conf.int
+    ## [1] 5.406506 8.677833
+    ## attr(,"conf.level")
+    ## [1] 0.95
+    ## 
+    ## $estimate
+    ## mean of x 
+    ##   7.04217 
+    ## 
+    ## $null.value
+    ## mean 
+    ##    0
+
+Plotting power vs. Effect size
+
+``` r
+power_vs_effect_size = t_test_results %>% 
+                       group_by(mean_val) %>% 
+                       summarize(power = mean(is_rejected))
+
+ggplot(power_vs_effect_size, aes(x = mean_val, y = power)) +
+  geom_line() + geom_point() +
+  labs(x = "True Mean (Effect Size)", y = "Power", title = "Power vs. Effect Size in One-Sample t-Test")
+```
+
+![](HW5_files/figure-gfm/unnamed-chunk-10-1.png)<!-- --> This plot
+illustrates that as the true mean increases, power also increases. In
+other words, the power increases with the effect size, where it get
+closer to 1.
+
+Plotting average estimate of mu vs. true mu
+
+``` r
+average_estimates = t_test_results %>% 
+                    group_by(mean_val) %>% 
+                    summarize(avg_estimate = mean(mean_estimate),
+                              avg_estimate_rejected = mean(mean_estimate[is_rejected]))
+
+ggplot(average_estimates, aes(x = mean_val)) +
+  geom_line(aes(y = avg_estimate, color = "Overall Average")) +
+  geom_line(aes(y = avg_estimate_rejected, color = "Average when Null Rejected")) +
+  labs(x = "True Mean", y = "Average Estimate of μ̂", color = "Estimate Type") +
+  ggtitle("Average Estimate of μ̂ vs. True Mean") +
+  scale_color_manual(values = c("Overall Average" = "red", "Average when Null Rejected" = "blue"))
+```
+
+![](HW5_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
+
+The observed sample mean of μ̂ in tests where the null hypothesis is
+rejected does not align closely with the true value of μ for lower
+values such as 1 and 2, but it tends to be more consistent for higher
+values like 3, 4, 5, and 6.
+
+For the lower values (μ = 1, 2), the discrepancy can be attributed to
+the small effect size, which hovers near the hypothesized null value. In
+such scenarios, the inherent variability in sampling, along with the
+potential for sampling errors, can introduce randomness. This randomness
+may lead to the observed sample mean of μ̂ deviating from the true mean
+when the null hypothesis is rejected.
+
+Conversely, for the higher values (μ = 3, 4, 5, 6), the effect size is
+considerably larger, enhancing the ability to detect statistically
+significant differences. In these cases, the observed sample mean of μ̂
+tends to be a more accurate reflection of the true mean. The larger
+discrepancies from the null hypothesis value are more readily detected,
+lending to a closer alignment between the observed sample mean and the
+true value.
